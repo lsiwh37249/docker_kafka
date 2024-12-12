@@ -1,0 +1,148 @@
+networks:
+  kafka-network: # 사용자 정의 네트워크 추가
+
+services:
+  controller-1:
+    build: ./kafka-controller
+    container_name: controller-1
+    networks:
+      - kafka-network # 네트워크에 연결
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: controller
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@controller-1:9093, 2@controller-2:9093, 3@controller-3:9093
+    volumes:    
+      - shared_volume:/tmp/kraft-clusterid
+      - ../volume/kafka-controller-1/config/:/opt/kafka/config/
+      - ../volume/kafka-controller-1/plugins/:/usr/local/share/kafka/plugins
+  controller-2:
+    build: ./kafka-controller-s
+    container_name: controller-2
+    networks:
+      - kafka-network # 네트워크에 연결
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_PROCESS_ROLES: controller
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@controller-1:9093, 2@controller-2:9093, 3@controller-3:9093
+    depends_on:
+      - controller-1
+    volumes:
+      - shared_volume:/tmp/kraft-clusterid
+
+  controller-3:
+    build: ./kafka-controller-s
+    container_name: controller-3
+    networks:
+      - kafka-network # 네트워크에 연결
+    environment:
+      KAFKA_NODE_ID: 3
+      KAFKA_PROCESS_ROLES: controller
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@controller-1:9093, 2@controller-2:9093, 3@controller-3:9093
+    depends_on:
+      - controller-1
+    volumes:
+      - shared_volume:/tmp/kraft-clusterid
+     
+
+  broker-1:
+    build: ./kafka-broker
+    container_name: broker-1
+    ports:
+      - 29092:9092
+    depends_on:
+      - controller-1
+      - controller-2
+      - controller-3
+    networks:
+      - kafka-network # 네트워크에 연결
+    environment:
+      KAFKA_NODE_ID: 4
+      KAFKA_PROCESS_ROLES: broker
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:19092, PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://broker-1:19092, PLAINTEXT_HOST://localhost:29092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@controller-1:9093, 2@controller-2:9093, 3@controller-3:9093
+    volumes:
+      - shared_volume:/tmp/kraft-clusterid
+
+  broker-2:
+    build: ./kafka-broker
+    container_name: broker-2
+    ports:
+      - 39092:9092
+    depends_on:
+      - controller-1
+      - controller-2
+      - controller-3
+    networks:
+      - kafka-network # 네트워크에 연결
+    environment:
+      KAFKA_NODE_ID: 5
+      KAFKA_PROCESS_ROLES: broker
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:19092, PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://broker-2:19092, PLAINTEXT_HOST://localhost:29092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@controller-1:9093, 2@controller-2:9093, 3@controller-3:9093
+    volumes:
+      - shared_volume:/tmp/kraft-clusterid
+  broker-3:
+    build: ./kafka-broker
+    container_name: broker-3
+    ports:
+      - 49092:9092
+    depends_on:
+      - controller-1
+      - controller-2
+      - controller-3
+    networks:
+      - kafka-network # 네트워크에 연결
+    environment:
+      KAFKA_NODE_ID: 6
+      KAFKA_PROCESS_ROLES: broker
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:19092, PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://broker-3:19092, PLAINTEXT_HOST://localhost:29092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@controller-1:9093, 2@controller-2:9093, 3@controller-3:9093
+    volumes:
+      - shared_volume:/tmp/kraft-clusterid
+  
+  kafkaui:
+    image: provectuslabs/kafka-ui:latest
+    restart: unless-stopped
+    container_name: Kafka-ui
+    ports:
+      - '8085:8080' # 호스트의 8085 포트를 컨테이너의 8080 포트에 바인딩
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=Local-Kraft-Cluster
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=broker-1:19092,broker-2:19092,broker-3:19092
+      - DYNAMIC_CONFIG_ENABLED=true
+      - KAFKA_CLUSTERS_0_AUDIT_TOPICAUDITENABLED=true
+      - KAFKA_CLUSTERS_0_AUDIT_CONSOLEAUDITENABLED=true
+    depends_on:
+      - broker-1
+      - broker-2
+      - broker-3
+    networks:
+      - kafka-network
+
+  kafka-connector:
+    build: ./kafka-connector
+    container_name: connector
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./kafka-connector/plugins:/opt/kafka/plugins
+    networks:
+      - kafka-network # 네트워크에 연결
+
+volumes:
+  shared_volume:
